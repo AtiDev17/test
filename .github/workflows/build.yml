@@ -6,7 +6,7 @@ on:
       qt_version:
         description: 'Qt Version to build'
         required: true
-        default: '6.10.ß'
+        default: '6.10.0'
 
 jobs:
   build:
