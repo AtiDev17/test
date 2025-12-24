@@ -58,7 +58,7 @@ jobs:
         shell: bash
         run: |
           # 1. Create the _tools folder so the script doesn't die
-          mkdir _tools
+          mkdir -p _tools
           
           # 2. Fix Visual Studio Path (GHA uses Enterprise, script hardcodes Community)
           sed -i 's/Community/Enterprise/g' compile_win.pl
