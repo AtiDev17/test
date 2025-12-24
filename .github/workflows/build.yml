@@ -77,6 +77,15 @@ jobs:
           Get-Command ninja | Copy-Item -Destination _tools\ninja.exe
           Write-Host "Tools populated successfully."
 
+      - name: Cache Qt Build
+        id: cache-qt
+        uses: actions/cache@v4
+        with:
+          path: _qt6-build-amd64
+          key: qt6-build-${{ runner.os }}-${{ inputs.qt_version }}-${{ hashFiles('compile_win.pl') }}
+          restore-keys: |
+            qt6-build-${{ runner.os }}-${{ inputs.qt_version }}-
+
       - name: Run Build Script
         shell: cmd
         run: |
@@ -95,12 +104,17 @@ jobs:
           
           echo "Looking for compiled DLLs..."
           
-          if exist qt6-install\bin\Qt6Core.dll (
-              echo "Found in install dir!"
-              copy qt6-install\bin\*.dll artifacts\
+          :: Check the build-specific directory found in the logs
+          if exist _qt6-build-amd64\qt6-install\bin\Qt6Core.dll (
+              echo "Found in _qt6-build-amd64\qt6-install\bin!"
+              copy _qt6-build-amd64\qt6-install\bin\*.dll artifacts\
           ) else (
-              echo "Install dir empty, checking source bin..."
-              copy qtbase\bin\*.dll artifacts\
+              echo "Could not find DLLs in the expected location."
+              echo "Listing root directory for debugging:"
+              dir
+              echo "Listing _qt6-build-amd64 directory:"
+              if exist _qt6-build-amd64 dir _qt6-build-amd64
+              exit 1
           )
 
       - name: Upload Artifacts
