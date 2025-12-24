@@ -16,10 +16,12 @@ jobs:
     timeout-minutes: 360 
     
     steps:
-      - name: Checkout Patch Repository
+      - name: Checkout Patch Repo
         uses: actions/checkout@v4
         with:
-          path: patch_repo
+          repository: ANightly/qt6windows7  # Using the repo from your screenshot
+          path: patch_repo                  # This names the folder "patch_repo" so the script finds it
+          ref: master
 
       - name: Install Perl Dependencies
         run: |
