@@ -1,7 +1,7 @@
 name: Build Qt6 for Windows 7
 
 on:
-  workflow_dispatch: # Allows manual trigger
+  workflow_dispatch:
     inputs:
       qt_version:
         description: 'Qt Version to build'
@@ -10,81 +10,98 @@ on:
 
 jobs:
   build:
-    name: Build Qt ${{ github.event.inputs.qt_version }}
+    name: Build Qt ${{ inputs.qt_version }}
     runs-on: windows-2022
-    # Set a long timeout; Qt builds are slow!
-    timeout-minutes: 360 
+    timeout-minutes: 360
     
     steps:
+      # 1. Checkout YOUR code (gets compile_win.pl and the _tools folder)
       - name: Checkout My Repo
         uses: actions/checkout@v4
-        
+
+      # 2. Checkout the PATCHES (puts them in a subfolder)
       - name: Checkout Patch Repo
         uses: actions/checkout@v4
         with:
-          repository: ANightly/qt6windows7  # Using the repo from your screenshot
-          path: patch_repo                  # This names the folder "patch_repo" so the script finds it
+          repository: ANightly/qt6windows7
+          path: patch_repo
           ref: master
 
       - name: Install Perl Dependencies
-        run: |
-          cpanm Path::Tiny IPC::Cmd
+        run: cpanm Path::Tiny IPC::Cmd
 
-      - name: Install wget (Required by script)
+      - name: Install wget
         run: choco install wget --no-progress
 
       - name: Download Official Qt Source
         shell: bash
         run: |
-          QT_VER="${{ github.event.inputs.qt_version }}"
+          QT_VER="${{ inputs.qt_version }}"
           echo "Downloading Qt $QT_VER..."
-          # Construct download URL (Standard Qt mirror structure)
           wget https://download.qt.io/official_releases/qt/${QT_VER%.*}/$QT_VER/single/qt-everywhere-src-$QT_VER.tar.xz
           
           echo "Extracting Qt Source..."
           7z x qt-everywhere-src-$QT_VER.tar.xz
           7z x qt-everywhere-src-$QT_VER.tar
           
-          # Rename to a standard folder name expected by our logic
-          mv qt-everywhere-src-$QT_VER qt6-source
+          # CRITICAL FIX: Move files to root so compile_win.pl can find 'qtbase'
+          # The tar extracts to a folder like 'qt-everywhere-src-6.9.3'
+          # We move the CONTENTS of that folder to the current directory (.)
+          mv qt-everywhere-src-$QT_VER/* .
+          rm -rf qt-everywhere-src-$QT_VER
 
       - name: Apply Windows 7 Backports
         shell: bash
         run: |
-          echo "Overwriting Qt source with backports..."
-          cp -r patch_repo/qtbase/src/* qt6-source/qtbase/src/
+          echo "Copying patches..."
+          # Now that qtbase is in the root, we copy directly there
+          cp -r patch_repo/qtbase/src/* qtbase/src/
 
-      - name: Patch Build Script for GitHub Actions
+      - name: Patch Build Script
         shell: bash
         run: |
-          # 1. Create the _tools folder so the script doesn't die
-          mkdir -p _tools
-          
-          # 2. Fix Visual Studio Path (GHA uses Enterprise, script hardcodes Community)
+          # 1. Fix Visual Studio Path (Community -> Enterprise)
           sed -i 's/Community/Enterprise/g' compile_win.pl
           
-          # 3. Disable the script's attempt to extract cmake (GHA already has it)
-          # We just comment out the line that extracts cmake.7z
+          # 2. Disable extracting cmake.7z (We provide system cmake)
           sed -i 's/7z x cmake.7z/# 7z x cmake.7z/g' compile_win.pl
-          
-          # 4. Remove path setting that might conflict
-          # (Optional, but safer to rely on GHA environment)
+
+          # 3. CRITICAL: Remove 'system("pause")' to prevent hanging
+          sed -i 's/system ("pause");/# system ("pause");/g' compile_win.pl
+
+      - name: Setup Build Tools
+        shell: powershell
+        run: |
+          # Copy system tools to _tools so the script finds them
+          Get-Command cmake | Copy-Item -Destination _tools\cmake.exe
+          Get-Command ninja | Copy-Item -Destination _tools\ninja.exe
+          Write-Host "Tools populated successfully."
 
       - name: Run Build Script
+        shell: cmd
         run: |
-          # Usage: perl compile_win.pl [arch] [install_dir]
-          # We use x64 (amd64) and install to 'qt6-install'
+          # Initialize VS Environment
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          
+          # Run the build
+          # Arguments: [arch] [install_dir]
+          # Note: qt6-install must NOT exist beforehand
           perl compile_win.pl amd64 qt6-install
-        env:
-          # Ensure MSVC environment is active if needed, though script calls vcvarsall
-          VSINSTALLDIR: "C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise"
 
       - name: Package DLLs
+        shell: cmd
         run: |
           mkdir artifacts
-          copy qt6-install\bin\*.dll artifacts\
-          # Copy plugins if needed, e.g.:
-          # xcopy /E /I qt6-install\plugins artifacts\plugins
+          
+          echo "Looking for compiled DLLs..."
+          
+          if exist qt6-install\bin\Qt6Core.dll (
+              echo "Found in install dir!"
+              copy qt6-install\bin\*.dll artifacts\
+          ) else (
+              echo "Install dir empty, checking source bin..."
+              copy qtbase\bin\*.dll artifacts\
+          )
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
