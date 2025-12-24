@@ -70,6 +70,8 @@ jobs:
           # The script specifically skips 'qtsvg'. We remove that skip here.
           sed -i 's/qtsvg//g' compile_win.pl
 
+          sed -i 's/die "Error: build dir/# die "Error: build dir/g' compile_win.pl
+
       - name: Setup Build Tools
         shell: powershell
         run: |
