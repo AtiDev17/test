@@ -68,7 +68,7 @@ jobs:
 
           # 5. NEW: ENABLE SVG SUPPORT
           # The script specifically skips 'qtsvg'. We remove that skip here.
-          sed -i 's/qtsvg//g' compile_win.pl
+          sed -i 's/ qtsvg//g' compile_win.pl
 
           sed -i 's/die "Error: build dir/# die "Error: build dir/g' compile_win.pl
 
