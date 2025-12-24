@@ -44,9 +44,7 @@ jobs:
           7z x qt-everywhere-src-$QT_VER.tar.xz
           7z x qt-everywhere-src-$QT_VER.tar
           
-          # CRITICAL FIX: Move files to root so compile_win.pl can find 'qtbase'
-          # The tar extracts to a folder like 'qt-everywhere-src-6.9.3'
-          # We move the CONTENTS of that folder to the current directory (.)
+          # Move files to root so compile_win.pl can find 'qtbase'
           mv qt-everywhere-src-$QT_VER/* .
           rm -rf qt-everywhere-src-$QT_VER
 
@@ -54,7 +52,6 @@ jobs:
         shell: bash
         run: |
           echo "Copying patches..."
-          # Now that qtbase is in the root, we copy directly there
           cp -r patch_repo/qtbase/src/* qtbase/src/
 
       - name: Patch Build Script
@@ -80,14 +77,17 @@ jobs:
           Get-Command ninja | Copy-Item -Destination _tools\ninja.exe
           Write-Host "Tools populated successfully."
 
-      - name: Cache Qt Build
-        id: cache-qt
-        uses: actions/cache@v4
+      # --- IMPROVED CACHE LOGIC START ---
+      - name: Restore Qt Build Cache
+        id: cache-qt-restore
+        uses: actions/cache/restore@v4
         with:
           path: _qt6-build-amd64
+          # We use a simple key. If compile_win.pl changes, we start fresh.
           key: qt6-build-${{ runner.os }}-${{ inputs.qt_version }}-${{ hashFiles('compile_win.pl') }}
           restore-keys: |
             qt6-build-${{ runner.os }}-${{ inputs.qt_version }}-
+      # --- IMPROVED CACHE LOGIC END ---
 
       - name: Run Build Script
         shell: cmd
@@ -97,7 +97,6 @@ jobs:
           
           :: Run the build
           :: We use %CD%\qt6-install to force an absolute path.
-          :: This ensures files land in D:\a\test\test\qt6-install
           perl compile_win.pl amd64 %CD%\qt6-install
 
       - name: Package DLLs
@@ -120,3 +119,12 @@ jobs:
         with:
           name: qt6-win7-dlls
           path: artifacts/
+
+      # --- SAVE CACHE EVEN ON FAILURE ---
+      - name: Save Qt Build Cache
+        id: cache-qt-save
+        uses: actions/cache/save@v4
+        if: always() 
+        with:
+          path: _qt6-build-amd64
+          key: qt6-build-${{ runner.os }}-${{ inputs.qt_version }}-${{ hashFiles('compile_win.pl') }}
