@@ -130,7 +130,7 @@ foreach (split(/\s/, $skipped_modules)) {
     $skipped_modules_cmd .= "-skip $_ ";
 }
 
-my $configure_cmd = "..\\configure -prefix $install_dir -opensource -debug-and-release -confirm-license -opengl desktop -nomake tests -nomake examples";
+my $configure_cmd = "..\\configure -prefix $install_dir -opensource -release -confirm-license -opengl desktop -nomake tests -nomake examples";
 
 # append skip modules
 $configure_cmd .= " $skipped_modules_cmd";
