@@ -6,7 +6,7 @@ on:
       qt_version:
         description: 'Qt Version to build'
         required: true
-        default: '6.9.3'
+        default: '6.10.ß'
 
 jobs:
   build:
@@ -23,7 +23,7 @@ jobs:
         with:
           repository: ANightly/qt6windows7
           path: patch_repo
-          ref: master
+          ref: 6.10.0
 
       - name: Install Perl Dependencies
         run: cpanm Path::Tiny IPC::Cmd
