@@ -1,0 +1,91 @@
+name: Build Qt6 for Windows 7
+
+on:
+  workflow_dispatch: # Allows manual trigger
+    inputs:
+      qt_version:
+        description: 'Qt Version to build'
+        required: true
+        default: '6.9.3'
+
+jobs:
+  build:
+    name: Build Qt ${{ github.event.inputs.qt_version }}
+    runs-on: windows-2022
+    # Set a long timeout; Qt builds are slow!
+    timeout-minutes: 360 
+    
+    steps:
+      - name: Checkout Patch Repository
+        uses: actions/checkout@v4
+        with:
+          path: patch_repo
+
+      - name: Install Perl Dependencies
+        run: |
+          cpanm Path::Tiny IPC::Cmd
+
+      - name: Install wget (Required by script)
+        run: choco install wget --no-progress
+
+      - name: Download Official Qt Source
+        shell: bash
+        run: |
+          QT_VER="${{ github.event.inputs.qt_version }}"
+          echo "Downloading Qt $QT_VER..."
+          # Construct download URL (Standard Qt mirror structure)
+          wget https://download.qt.io/official_releases/qt/${QT_VER%.*}/$QT_VER/single/qt-everywhere-src-$QT_VER.tar.xz
+          
+          echo "Extracting Qt Source..."
+          7z x qt-everywhere-src-$QT_VER.tar.xz
+          7z x qt-everywhere-src-$QT_VER.tar
+          
+          # Rename to a standard folder name expected by our logic
+          mv qt-everywhere-src-$QT_VER qt6-source
+
+      - name: Apply Windows 7 Backports
+        shell: bash
+        run: |
+          echo "Overwriting Qt source with backports..."
+          cp -r patch_repo/src/* qt6-source/qtbase/src/
+          
+          # Copy the build script to the level above qtbase (root of workspace)
+          cp patch_repo/compile_win.pl .
+
+      - name: Patch Build Script for GitHub Actions
+        shell: bash
+        run: |
+          # 1. Create the _tools folder so the script doesn't die
+          mkdir _tools
+          
+          # 2. Fix Visual Studio Path (GHA uses Enterprise, script hardcodes Community)
+          sed -i 's/Community/Enterprise/g' compile_win.pl
+          
+          # 3. Disable the script's attempt to extract cmake (GHA already has it)
+          # We just comment out the line that extracts cmake.7z
+          sed -i 's/7z x cmake.7z/# 7z x cmake.7z/g' compile_win.pl
+          
+          # 4. Remove path setting that might conflict
+          # (Optional, but safer to rely on GHA environment)
+
+      - name: Run Build Script
+        run: |
+          # Usage: perl compile_win.pl [arch] [install_dir]
+          # We use x64 (amd64) and install to 'qt6-install'
+          perl compile_win.pl amd64 qt6-install
+        env:
+          # Ensure MSVC environment is active if needed, though script calls vcvarsall
+          VSINSTALLDIR: "C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise"
+
+      - name: Package DLLs
+        run: |
+          mkdir artifacts
+          copy qt6-install\bin\*.dll artifacts\
+          # Copy plugins if needed, e.g.:
+          # xcopy /E /I qt6-install\plugins artifacts\plugins
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: qt6-win7-dlls
+          path: artifacts/
