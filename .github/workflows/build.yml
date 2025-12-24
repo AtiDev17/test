@@ -49,7 +49,7 @@ jobs:
         shell: bash
         run: |
           echo "Overwriting Qt source with backports..."
-          cp -r patch_repo/src/* qt6-source/qtbase/src/
+          cp -r patch_repo/qtbase/src/* qt6-source/qtbase/src/
           
           # Copy the build script to the level above qtbase (root of workspace)
           cp patch_repo/compile_win.pl .
