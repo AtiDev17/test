@@ -63,11 +63,14 @@ jobs:
           # 1. Fix Visual Studio Path (Community -> Enterprise)
           sed -i 's/Community/Enterprise/g' compile_win.pl
           
-          # 2. Disable extracting cmake.7z (We provide system cmake)
+          # 2. Disable extracting cmake.7z (We use system cmake)
           sed -i 's/7z x cmake.7z/# 7z x cmake.7z/g' compile_win.pl
 
-          # 3. CRITICAL: Remove 'system("pause")' to prevent hanging
+          # 3. CRITICAL: Remove 'system("pause")' or the build will HANG forever
           sed -i 's/system ("pause");/# system ("pause");/g' compile_win.pl
+
+          # 4. CRITICAL: Prevent script from deleting the build dir so we can CACHE it
+          sed -i 's/rmdir $build_dir/# rmdir $build_dir/g' compile_win.pl
 
       - name: Setup Build Tools
         shell: powershell
@@ -89,31 +92,26 @@ jobs:
       - name: Run Build Script
         shell: cmd
         run: |
-          # Initialize VS Environment
+          :: Initialize VS Environment
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
           
-          # Run the build
-          # Arguments: [arch] [install_dir]
-          # Note: qt6-install must NOT exist beforehand
-          perl compile_win.pl amd64 qt6-install
+          :: Run the build
+          :: We use %CD%\qt6-install to force an absolute path.
+          :: This ensures files land in D:\a\test\test\qt6-install
+          perl compile_win.pl amd64 %CD%\qt6-install
 
       - name: Package DLLs
         shell: cmd
         run: |
           mkdir artifacts
           
-          echo "Looking for compiled DLLs..."
+          echo "Looking for compiled DLLs in root qt6-install..."
           
-          :: Check the build-specific directory found in the logs
-          if exist _qt6-build-amd64\qt6-install\bin\Qt6Core.dll (
-              echo "Found in _qt6-build-amd64\qt6-install\bin!"
-              copy _qt6-build-amd64\qt6-install\bin\*.dll artifacts\
+          if exist qt6-install\bin\Qt6Core.dll (
+              echo "Found in qt6-install\bin!"
+              copy qt6-install\bin\*.dll artifacts\
           ) else (
-              echo "Could not find DLLs in the expected location."
-              echo "Listing root directory for debugging:"
-              dir
-              echo "Listing _qt6-build-amd64 directory:"
-              if exist _qt6-build-amd64 dir _qt6-build-amd64
+              echo "Build failed or files missing."
               exit 1
           )
 
