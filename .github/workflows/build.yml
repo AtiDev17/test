@@ -15,11 +15,9 @@ jobs:
     timeout-minutes: 360
     
     steps:
-      # 1. Checkout YOUR code (gets compile_win.pl and the _tools folder)
       - name: Checkout My Repo
         uses: actions/checkout@v4
 
-      # 2. Checkout the PATCHES (puts them in a subfolder)
       - name: Checkout Patch Repo
         uses: actions/checkout@v4
         with:
@@ -44,7 +42,6 @@ jobs:
           7z x qt-everywhere-src-$QT_VER.tar.xz
           7z x qt-everywhere-src-$QT_VER.tar
           
-          # Move files to root so compile_win.pl can find 'qtbase'
           mv qt-everywhere-src-$QT_VER/* .
           rm -rf qt-everywhere-src-$QT_VER
 
@@ -57,70 +54,66 @@ jobs:
       - name: Patch Build Script
         shell: bash
         run: |
-          # 1. Fix Visual Studio Path (Community -> Enterprise)
+          # 1. Fix Visual Studio Path
           sed -i 's/Community/Enterprise/g' compile_win.pl
           
-          # 2. Disable extracting cmake.7z (We use system cmake)
+          # 2. Disable extracting cmake.7z
           sed -i 's/7z x cmake.7z/# 7z x cmake.7z/g' compile_win.pl
 
-          # 3. CRITICAL: Remove 'system("pause")' or the build will HANG forever
+          # 3. CRITICAL: Remove 'system("pause")'
           sed -i 's/system ("pause");/# system ("pause");/g' compile_win.pl
 
-          # 4. CRITICAL: Prevent script from deleting the build dir so we can CACHE it
+          # 4. CRITICAL: Prevent deleting build dir (for cache)
           sed -i 's/rmdir $build_dir/# rmdir $build_dir/g' compile_win.pl
+
+          # 5. NEW: ENABLE SVG SUPPORT
+          # The script specifically skips 'qtsvg'. We remove that skip here.
+          sed -i 's/qtsvg//g' compile_win.pl
 
       - name: Setup Build Tools
         shell: powershell
         run: |
-          # Copy system tools to _tools so the script finds them
           Get-Command cmake | Copy-Item -Destination _tools\cmake.exe
           Get-Command ninja | Copy-Item -Destination _tools\ninja.exe
-          Write-Host "Tools populated successfully."
 
-      # --- IMPROVED CACHE LOGIC START ---
       - name: Restore Qt Build Cache
         id: cache-qt-restore
         uses: actions/cache/restore@v4
         with:
           path: _qt6-build-amd64
-          # We use a simple key. If compile_win.pl changes, we start fresh.
           key: qt6-build-${{ runner.os }}-${{ inputs.qt_version }}-${{ hashFiles('compile_win.pl') }}
           restore-keys: |
             qt6-build-${{ runner.os }}-${{ inputs.qt_version }}-
-      # --- IMPROVED CACHE LOGIC END ---
 
       - name: Run Build Script
         shell: cmd
         run: |
-          :: Initialize VS Environment
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-          
-          :: Run the build
-          :: We use %CD%\qt6-install to force an absolute path.
           perl compile_win.pl amd64 %CD%\qt6-install
 
-      - name: Package DLLs
+      - name: Package DLLs and Plugins
         shell: cmd
         run: |
           mkdir artifacts
+          mkdir artifacts\plugins
           
-          echo "Looking for compiled DLLs in root qt6-install..."
-          
+          echo "Copying Main DLLs..."
           if exist qt6-install\bin\Qt6Core.dll (
-              echo "Found in qt6-install\bin!"
               copy qt6-install\bin\*.dll artifacts\
           ) else (
-              echo "Build failed or files missing."
+              echo "Build failed!"
               exit 1
           )
+
+          echo "Copying Plugins (platforms, imageformats, styles, etc)..."
+          xcopy qt6-install\plugins artifacts\plugins /E /I /Y
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: qt6-win7-dlls
+          name: qt6-win7-full
           path: artifacts/
 
-      # --- SAVE CACHE EVEN ON FAILURE ---
       - name: Save Qt Build Cache
         id: cache-qt-save
         uses: actions/cache/save@v4
