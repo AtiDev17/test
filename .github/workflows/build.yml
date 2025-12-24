@@ -58,7 +58,7 @@ jobs:
           sed -i 's/Community/Enterprise/g' compile_win.pl
           
           # 2. Disable extracting cmake.7z
-          sed -i 's/7z x cmake.7z/# 7z x cmake.7z/g' compile_win.pl
+          sed -i 's/7z x cmake.7z/REM 7z x cmake.7z/g' compile_win.pl
 
           # 3. CRITICAL: Remove 'system("pause")'
           sed -i 's/system ("pause");/# system ("pause");/g' compile_win.pl
