@@ -16,6 +16,9 @@ jobs:
     timeout-minutes: 360 
     
     steps:
+      - name: Checkout My Repo
+        uses: actions/checkout@v4
+        
       - name: Checkout Patch Repo
         uses: actions/checkout@v4
         with:
